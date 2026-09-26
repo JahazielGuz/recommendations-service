@@ -1,7 +1,7 @@
 import argparse
 from importlib.resources import files
 
-from recommendations.config import required
+from recommendations.config import require
 from recommendations.db import connect
 
 VERSION_TABLE = """
@@ -11,13 +11,13 @@ CREATE TABLE IF NOT EXISTS schema_migration (
 )
 """
 
-def Migrate() -> None:
+def migrate() -> None:
   """Apply every migration this database has not seen, oldest first."""
   directory = files("recommendations").joinpath("migrations")
   scripts = sorted((path for path in directory.iterdir() if path.name.endswith(".sql")),
   key=lambda path: path.name)
 
-  with connect(required("DATABASE_URL"), vectors=False) as connection:
+  with connect(require("DATABASE_URL"), vectors=False) as connection:
     with connection.cursor() as cursor:
       cursor.execute(VERSION_TABLE)
       cursor.execute("SELECT version FROM schema_migration")

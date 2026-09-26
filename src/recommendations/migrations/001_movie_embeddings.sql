@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE movie_embedding (
-  movie_id UUID PRIMARY_KEY,
+  movie_id UUID PRIMARY KEY,
   -- The exact text that was embedded. Kept, not just hashed, because the first question about
   -- any wrong result is "what did the model actually see?"
   document TEXT NOT NULL,
