@@ -17,51 +17,57 @@ UPSERT = """
     updated_at = now()
 """
 
+
 @dataclass(frozen=True)
 class RebuildReport:
-  catalogue: int
-  embedded: int
-  unchanged: int
-  removed: int
+    catalogue: int
+    embedded: int
+    unchanged: int
+    removed: int
+
 
 def rebuild() -> RebuildReport:
-  """Bring every stored vector up to date with the catalogue, embedding only what changed."""
-  movies = fetch_movies(require("CORE_BASE_URL"))
+    """Bring every stored vector up to date with the catalogue, embedding only what changed."""
+    movies = fetch_movies(require("CORE_BASE_URL"))
 
-  # An empty catalogue is a broken read, not an instruction to delete everything
-  if not movies:
-    raise RuntimeError("The catalogue returned no movies; refusing to rebuild")
-  
-  documents = {movie.id: build_document(movie) for movie in movies}
+    # An empty catalogue is a broken read, not an instruction to delete everything
+    if not movies:
+        raise RuntimeError("The catalogue returned no movies; refusing to rebuild")
 
-  with connect(require("DATABASE_URL")) as connection:
-    with connection.cursor() as cursor:
-      cursor.execute("SELECT movie_id, document_hash, model FROM movie_embedding")
-      stored = {str(row[0]): (row[1], row[2]) for row in cursor.fetchall()}
-  
-    stale = [ movie_id for movie_id, document in documents.items() if stored.get(movie_id) != (document_hash(document),  MODEL)]
+    documents = {movie.id: build_document(movie) for movie in movies}
 
-    if stale:
-      client = build_client()
-      vectors = embed(client, [documents[movie_id] for movie_id in stale])
+    with connect(require("DATABASE_URL")) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT movie_id, document_hash, model FROM movie_embedding")
+            stored = {str(row[0]): (row[1], row[2]) for row in cursor.fetchall()}
 
-      rows = [
-        (movie_id, documents[movie_id], document_hash(documents[movie_id]), MODEL, vector)
-        for movie_id, vector in zip(stale, vectors, strict=True)
-      ]
+        stale = [
+            movie_id
+            for movie_id, document in documents.items()
+            if stored.get(movie_id) != (document_hash(document), MODEL)
+        ]
 
-      with connection.cursor() as cursor:
-        cursor.executemany(UPSERT, rows)
-    
-    with connection.cursor() as cursor:
-      cursor.execute(
-        "DELETE FROM movie_embedding WHERE movie_id <> ALL(%s::uuid[])", (list(documents),)
-      )
-      removed = cursor.rowcount
-  
-  return RebuildReport(
-    catalogue=len(movies),
-    embedded=len(stale),
-    unchanged=len(documents) - len(stale),
-    removed=removed,
-  )
+        if stale:
+            client = build_client()
+            vectors = embed(client, [documents[movie_id] for movie_id in stale])
+
+            rows = [
+                (movie_id, documents[movie_id], document_hash(documents[movie_id]), MODEL, vector)
+                for movie_id, vector in zip(stale, vectors, strict=True)
+            ]
+
+            with connection.cursor() as cursor:
+                cursor.executemany(UPSERT, rows)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM movie_embedding WHERE movie_id <> ALL(%s::uuid[])", (list(documents),)
+            )
+            removed = cursor.rowcount
+
+    return RebuildReport(
+        catalogue=len(movies),
+        embedded=len(stale),
+        unchanged=len(documents) - len(stale),
+        removed=removed,
+    )
