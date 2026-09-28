@@ -22,3 +22,8 @@ recommendations = "recommendations.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/recommendations"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

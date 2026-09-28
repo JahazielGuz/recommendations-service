@@ -25,7 +25,7 @@ def _to_movie(body: dict) -> Movie:
     overview=body["overview"]
   )
 
-def fetch_movies(base_url: str) -> list[Movie]:
+def fetch_movies(base_url: str, *, transport: httpx.BaseTransport | None = None) -> list[Movie]:
   """The whole catalogue, read over the public API.
   This service never opens webshow-core's database. Everything it stores is derived from what
   any other client could fetch, which is what makes a rebuild from nothing possible.
@@ -33,7 +33,7 @@ def fetch_movies(base_url: str) -> list[Movie]:
   movies: list[Movie] = []
   page = 1
 
-  with httpx.Client(timeout=TIMEOUT) as client:
+  with httpx.Client(timeout=TIMEOUT, transport=transport) as client:
     while True:
       response = client.get(
         f"{base_url}/movies",
