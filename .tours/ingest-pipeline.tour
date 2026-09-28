@@ -1,0 +1,87 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "The ingest pipeline",
+  "description": "How a film in the catalogue becomes a vector in this database.",
+  "steps": [
+    {
+      "file": "src/recommendations/embeddings.py",
+      "line": 7,
+      "description": "**Start here.** `BATCH` is why a thousand films cost ten requests instead of a thousand. The embeddings endpoint accepts an array, so the only question is how big a slice to send. A hundred keeps each request small enough that retrying one is cheap, while cutting the round trips by two orders of magnitude."
+    },
+    {
+      "file": "src/recommendations/embeddings.py",
+      "line": 9,
+      "description": "These two values define the vector space. They are constants rather than environment variables on purpose: `DIMENSIONS` has to match `VECTOR(1536)` in the migration, so changing the model to one of a different width is a schema change, not a setting. Both are part of what makes a stored row stale, which you will see in `ingest.py`."
+    },
+    {
+      "file": "src/recommendations/embeddings.py",
+      "line": 14,
+      "description": "The key is read through `require`, so a missing one fails **here**, as the command starts, with a message naming the variable. Without that you would get a 401 from OpenAI halfway through a run and have to work backwards to the cause.\n\n`max_retries=3` is a real part of the design: embedding a catalogue means repeated calls against a service that rate limits, and the client already backs off and retries for you."
+    },
+    {
+      "file": "src/recommendations/embeddings.py",
+      "line": 20,
+      "description": "The batching loop. Walk one iteration: slice a hundred documents, send them as one array, collect what comes back. Everything else in this function is bookkeeping."
+    },
+    {
+      "file": "src/recommendations/embeddings.py",
+      "line": 25,
+      "description": "**The least obvious line in the file.** Each item in the response carries the index of the document it came from, and sorting on that index is what guarantees a film never receives another film's vector.\n\nWithout it you would be trusting the response to arrive in the order you sent. If that assumption ever broke, nothing would error: every film would still have a vector, search would still work, and the answers would be quietly wrong."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 9,
+      "description": "**Read the SQL before any code.** It is the shape of a row: the film's id, the exact text that was embedded, that text's hash, the model that produced the vector, and the vector.\n\n`ON CONFLICT (movie_id) DO UPDATE` is what makes re-running safe. Without it a second run would fail on the first duplicate key."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 27,
+      "description": "The whole job, in four beats. Follow them in order and the rest of the file explains itself."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 32,
+      "description": "**Beat one: the guard.** An empty catalogue raises rather than continuing. That looks paranoid until you notice the `DELETE` further down: without this, one failed read would wipe every vector you have and report success."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 37,
+      "description": "Everything below runs inside one transaction. The context manager commits on a clean exit and rolls back on an exception, so a failure partway through leaves the table exactly as it was rather than half updated."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 40,
+      "description": "**Beat two: what the database already knows.** One row per stored film: its hash and its model. This is the entire state needed to decide what work to skip."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 42,
+      "description": "**The comparison that makes this cheap to re-run.** Look at what is compared: a tuple of hash **and** model, not just the hash.\n\nThat second element is why switching embedding models re-embeds everything automatically. Vectors are only comparable with others from the same model, so a row produced by a different one is stale even when its text is identical."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 46,
+      "description": "**Beat three.** Only `stale` goes to OpenAI. On a run where nothing changed, this list is empty and no request is made at all, which is what makes the command safe to run in a loop while tuning the document format."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 50,
+      "description": "`strict=True` raises if the vector count ever disagrees with the id count, instead of silently truncating. A mismatch here would pair films with other films' vectors and produce a store that looks perfectly healthy."
+    },
+    {
+      "file": "src/recommendations/ingest.py",
+      "line": 56,
+      "description": "**Beat four: the sweep.** Films that have left the catalogue lose their vectors. A vector with no film behind it is a recommendation the frontend has nothing to render, and that failure only ever shows up in the interface."
+    },
+    {
+      "file": "src/recommendations/cli.py",
+      "line": 40,
+      "description": "One line exposes the whole job as `recommendations rebuild`, beside `migrate`. Small, but it is the difference between a function nobody can invoke and an operation you can run from a terminal, a cron entry or a deploy hook."
+    },
+    {
+      "file": "src/recommendations/cli.py",
+      "line": 48,
+      "description": "The counts are the point. A run that embedded nothing has to look different from one that embedded everything, because that is the first thing you will want to know when you wonder whether it did anything."
+    }
+  ]
+}

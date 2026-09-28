@@ -6,6 +6,7 @@ dependencies = [
   "pgvector>=0.3",
   "python-dotenv>=1.0",
   "httpx>=0.28.1",
+  "openai>=3.20.0",
 ]
 
 name = "recommendations-service"

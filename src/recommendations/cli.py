@@ -3,6 +3,7 @@ from importlib.resources import files
 
 from recommendations.config import require
 from recommendations.db import connect
+from recommendations.ingest import rebuild
 
 VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_migration (
@@ -36,8 +37,16 @@ def main() -> None:
   parser = argparse.ArgumentParser(prog="recommendations", description="webshow retrieval")
   commands = parser.add_subparsers(dest="command", required=True)
   commands.add_parser("migrate", help="apply pending migrations")
+  commands.add_parser("rebuild", help="embed every film whose document or model changed")
 
   arguments = parser.parse_args()
 
   if arguments.command == "migrate":
     migrate()
+    return
+  
+  report = rebuild()
+  print(
+    f"catalogue {report.catalogue}, embedded {report.embedded}, "
+    f"unchanged {report.unchanged}, removed {report.removed}"
+  )
