@@ -6,6 +6,7 @@ dependencies = [
   "pgvector>=0.3",
   "python-dotenv>=1.0",
   "httpx>=0.28.1",
+  "openai>=3.20.0",
 ]
 
 name = "recommendations-service"
@@ -21,3 +22,21 @@ recommendations = "recommendations.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/recommendations"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.9",
+]
+
+[tool.ruff]
+# 100 to match the Prettier printWidth the other two repositories use
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# The defaults are pyflakes and a slice of pycodestyle. The three additions each pay for
+# themselves: I keeps imports sorted so diffs stay small, UP rewrites syntax that newer Python
+# made obsolete, and B catches bugs the type checker cannot see, such as mutable default
+# arguments and a loop variable captured by a closure.
+select = ["E", "F", "I", "UP", "B"]
