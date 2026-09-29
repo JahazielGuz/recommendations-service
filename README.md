@@ -112,6 +112,42 @@ setting, which is why both live as constants in `embeddings.py`.
 Films that have left the catalogue lose their vectors on the next rebuild. A vector with no film
 behind it is a recommendation the frontend has nothing to render.
 
+## Deployment
+
+| Piece | Where |
+| --- | --- |
+| Service | Fly.io, region `iad`, beside `webshow-core` |
+| Database | Neon, a second database in the same project |
+
+```bash
+fly deploy
+```
+
+Three secrets, none of them in this repository:
+
+| Secret | What it is |
+| --- | --- |
+| `DATABASE_URL` | The Neon connection string for this service's own database |
+| `OPENAI_API_KEY` | Used only by `rebuild`, never while serving |
+| `CORE_BASE_URL` | The deployed catalogue API |
+
+```bash
+fly secrets import < .env.fly
+```
+
+Do not quote the values in that file. Everything after the first `=` is stored literally.
+
+The machine scales to **zero**, unlike `webshow-core`. Nothing here is on the critical path of a
+page load: if a similar-titles row is slow or missing the page still renders, so a cold start
+costs a row rather than a blank screen, and an idle machine costs nothing.
+
+Rebuilding against production is a local command rather than something the deployed service
+does, because it is a one-off that needs the OpenAI key and takes a minute:
+
+```bash
+DATABASE_URL="<neon>" CORE_BASE_URL="https://webshow-core.fly.dev" uv run recommendations rebuild
+```
+
 ## Migrations
 
 Numbered SQL files under `src/recommendations/migrations`, applied oldest first and recorded by
