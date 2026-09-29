@@ -1,0 +1,28 @@
+app = "webshow-recommendations"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "suspend"
+  # Zero, unlike webshow-core. Nothing here is on the critical path of a page load: if a
+  # similar-titles row is slow or missing the page still renders, so a cold start costs a row
+  # rather than a blank screen, and an idle machine costs nothing.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    # Liveness, not readiness: a health check that queries the database turns a database blip
+    # into a restart loop.
+    path = "/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
