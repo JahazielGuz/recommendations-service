@@ -50,6 +50,42 @@ Billing is capped at five names. Cast is a real similarity signal, but a long li
 out the plot. That number is a guess worth revisiting once there is an evaluation to revisit it
 against, and the document hash is what makes trying another value cost one rebuild.
 
+## Serving
+
+```bash
+uv run uvicorn recommendations.app:app --port 8100
+```
+
+| Endpoint | Answers |
+| --- | --- |
+| `GET /health` | Is the process alive? Touches nothing. |
+| `GET /ready` | Can this instance serve? Counts the vectors, so a machine that cannot reach them is taken out of rotation rather than restarted. |
+| `GET /similar/{movie_id}` | Films like this one, as ids and scores. |
+
+`/similar` takes three parameters. `limit` is how many to return, `pool` is how many nearest
+films to choose from, and `shuffle` decides whether to sample from that pool or return the top
+`limit` in rank order.
+
+Shuffling is on by default because the same film's neighbours appear in more than one place on a
+page, and two identical rows read as a bug. Drawing from a pool of twenty rather than reordering
+the whole catalogue means the variety costs relevance only down to the pool's worst member.
+
+Turn it off for measurement: a metric cannot evaluate a list that changes between runs.
+
+```
+GET /similar/{id}?shuffle=false&limit=6
+
+0.683  Spider-Man: No Way Home
+0.644  Spider-Man: Across the Spider-Verse
+0.634  Spider-Man: Homecoming
+0.627  Spider-Man: Far From Home
+0.617  Avengers: Doomsday
+0.587  The Amazing Spider-Man 2
+```
+
+The service returns ids, never titles or posters. It does not own those, and the caller joins
+them back to the catalogue.
+
 ## What a rebuild costs
 
 | | |
