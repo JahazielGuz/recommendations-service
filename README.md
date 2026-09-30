@@ -62,6 +62,14 @@ uv run uvicorn recommendations.app:app --port 8100
 | `GET /ready` | Can this instance serve? Counts the vectors, so a machine that cannot reach them is taken out of rotation rather than restarted. |
 | `GET /similar/{movie_id}` | Films like this one, as ids and scores. |
 
+Candidates are restricted to films sharing **at least one genre** with the subject, before any
+ranking happens. Genre is stored as a column and matched with array overlap rather than being
+left to the vector, because inside a vector it is one signal among many. Mutiny, an action
+thriller on a cargo ship, and Alien: Romulus, a horror on a derelict space station, scored 0.562,
+above every one of 1,770 random pairs in this catalogue, because both are people confined aboard
+a vessel facing a lethal threat. That is a real similarity and it is not the one a viewer means.
+A shared genre is a fact, so it is enforced as one.
+
 `/similar` takes three parameters. `limit` is how many to return, `pool` is how many nearest
 films to choose from, and `shuffle` decides whether to sample from that pool or return the top
 `limit` in rank order.

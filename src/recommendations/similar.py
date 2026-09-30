@@ -11,11 +11,18 @@ DEFAULT_LIMIT = 12
 # Cosine distance, ordered so the HNSW index is used. `1 - distance` is the similarity a human
 # reads the right way round. The subject is excluded by id, not by score: a remake of the same
 # film is a legitimate neighbour, but the film itself never is.
+#
+# `&&` is array overlap: at least one genre in common. This is the categorical half of the
+# answer and it belongs here rather than in the vector. A blended position weighs genre against
+# setting and tone, so a thriller on a cargo ship and a horror on a space station come out close
+# because both are people trapped on a vessel. That is a real similarity, and it is not the one
+# a viewer means. A shared genre is a fact, so it is enforced as one.
 NEAREST = """
     SELECT m.movie_id::text, 1 - (m.embedding <=> subject.embedding) AS score
     FROM movie_embedding AS m,
-         (SELECT embedding FROM movie_embedding WHERE movie_id = %s::uuid) AS subject
+         (SELECT embedding, genres FROM movie_embedding WHERE movie_id = %s::uuid) AS subject
     WHERE m.movie_id <> %s::uuid
+      AND m.genres && subject.genres
     ORDER BY m.embedding <=> subject.embedding
     LIMIT %s
 """
