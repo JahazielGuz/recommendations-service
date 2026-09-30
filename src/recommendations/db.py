@@ -33,7 +33,24 @@ def _get_pool() -> ConnectionPool:
     global _pool
 
     if _pool is None:
-        _pool = ConnectionPool(require("DATABASE_URL"), min_size=1, max_size=10, open=True)
+        _pool = ConnectionPool(
+            require("DATABASE_URL"),
+            # Zero, not one. Holding a connection open would keep Neon's compute awake around
+            # the clock, and a held socket does not survive this machine suspending anyway.
+            min_size=0,
+            max_size=10,
+            # Recycle before a connection has been idle long enough for the other end to have
+            # dropped it
+            max_idle=60,
+            # Validate a connection before handing it out. Without this a socket that died while
+            # the machine was suspended is handed to a request, which then blocks on a dead TCP
+            # connection until the kernel gives up, which is far longer than anyone will wait.
+            check=ConnectionPool.check_connection,
+            # Fail fast rather than hanging: a caller waiting on a wedged pool is worse than a
+            # caller told quickly that there is no answer
+            timeout=10,
+            open=True,
+        )
 
     return _pool
 
