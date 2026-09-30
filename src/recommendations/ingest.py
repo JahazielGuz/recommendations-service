@@ -7,13 +7,15 @@ from recommendations.documents import build_document, document_hash
 from recommendations.embeddings import MODEL, build_client, embed
 
 UPSERT = """
-  INSERT INTO movie_embedding (movie_id, document, document_hash, model, embedding, updated_at)
-  VALUES (%s, %s, %s, %s, %s, now())
+  INSERT INTO movie_embedding
+    (movie_id, document, document_hash, model, embedding, genres, updated_at)
+  VALUES (%s, %s, %s, %s, %s, %s, now())
   ON CONFLICT (movie_id) DO UPDATE SET
     document = EXCLUDED.document,
     document_hash = EXCLUDED.document_hash,
     model = EXCLUDED.model,
     embedding = EXCLUDED.embedding,
+    genres = EXCLUDED.genres,
     updated_at = now()
 """
 
@@ -35,6 +37,7 @@ def rebuild() -> RebuildReport:
         raise RuntimeError("The catalogue returned no movies; refusing to rebuild")
 
     documents = {movie.id: build_document(movie) for movie in movies}
+    genres = {movie.id: movie.genres for movie in movies}
 
     with connect(require("DATABASE_URL")) as connection:
         with connection.cursor() as cursor:
@@ -52,12 +55,29 @@ def rebuild() -> RebuildReport:
             vectors = embed(client, [documents[movie_id] for movie_id in stale])
 
             rows = [
-                (movie_id, documents[movie_id], document_hash(documents[movie_id]), MODEL, vector)
+                (
+                    movie_id,
+                    documents[movie_id],
+                    document_hash(documents[movie_id]),
+                    MODEL,
+                    vector,
+                    genres[movie_id],
+                )
                 for movie_id, vector in zip(stale, vectors, strict=True)
             ]
 
             with connection.cursor() as cursor:
                 cursor.executemany(UPSERT, rows)
+
+        # Genres are refreshed for every film, not only the stale ones. They are part of the
+        # document, so a change to them re-embeds anyway; this pass exists so that a column
+        # added after the vectors were written fills without paying to re-embed a thousand
+        # films that have not otherwise changed.
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                "UPDATE movie_embedding SET genres = %s WHERE movie_id = %s::uuid",
+                [(names, movie_id) for movie_id, names in genres.items()],
+            )
 
         with connection.cursor() as cursor:
             cursor.execute(
