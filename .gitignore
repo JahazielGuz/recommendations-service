@@ -2,5 +2,9 @@
 __pycache__/
 *.py[cod]
 .env
+# Every other .env variant too: .env.fly and friends hold live secrets and are meant to be
+# deleted after use, which is exactly the kind of thing people forget
+.env.*
+!.env.example
 .pytest_cache/
 .ruff_cache/
