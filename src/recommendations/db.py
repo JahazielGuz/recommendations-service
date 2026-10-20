@@ -3,7 +3,7 @@ from contextlib import contextmanager
 
 import psycopg
 from pgvector.psycopg import register_vector
-from psycopg_pool import ConnectionPool
+from psycopg_pool import NullConnectionPool
 
 from recommendations.config import require
 
@@ -23,32 +23,31 @@ def connect(database_url: str, *, vectors: bool = True) -> Iterator[psycopg.Conn
         yield connection
 
 
-# Opening a connection costs more than the query it would carry: a nearest-neighbour lookup is
-# about two milliseconds, a fresh Postgres connection tens. The pool is built on first use rather
-# than at import, so the CLI and the tests never open one they do not need.
-_pool: ConnectionPool | None = None
+# A connection per request, closed as soon as the request is done, so nothing is left open to go
+# stale. Fly suspends this machine about a minute after its last request, sooner than an idle
+# connection was recycled, and a socket frozen through a suspend is dead when the machine wakes.
+# Checking a pooled connection before use did not save it, because the check is a round trip on
+# that same dead socket and blocked until the kernel gave up, minutes later. A fresh connection
+# costs tens of milliseconds, against a two millisecond query, which this traffic can afford.
+# The pool is built on first use rather than at import, so the CLI and the tests never open one
+# they do not need.
+_pool: NullConnectionPool | None = None
 
 
-def _get_pool() -> ConnectionPool:
+def _get_pool() -> NullConnectionPool:
     global _pool
 
     if _pool is None:
-        _pool = ConnectionPool(
+        _pool = NullConnectionPool(
             require("DATABASE_URL"),
-            # Zero, not one. Holding a connection open would keep Neon's compute awake around
-            # the clock, and a held socket does not survive this machine suspending anyway.
-            min_size=0,
+            # Still a ceiling on how many connections are open at once
             max_size=10,
-            # Recycle before a connection has been idle long enough for the other end to have
-            # dropped it
-            max_idle=60,
-            # Validate a connection before handing it out. Without this a socket that died while
-            # the machine was suspended is handed to a request, which then blocks on a dead TCP
-            # connection until the kernel gives up, which is far longer than anyone will wait.
-            check=ConnectionPool.check_connection,
             # Fail fast rather than hanging: a caller waiting on a wedged pool is worse than a
             # caller told quickly that there is no answer
             timeout=10,
+            # Every request now opens a connection, so one to a database that does not answer
+            # gives up after a few seconds rather than hanging
+            kwargs={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
             open=True,
         )
 
